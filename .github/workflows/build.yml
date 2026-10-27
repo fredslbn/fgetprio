@@ -3,7 +3,7 @@ name: Build fgetpriority LKM
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 env:
   KERNEL_REPO: https://github.com/fredslbn/superchime.git   # change to your target kernel
