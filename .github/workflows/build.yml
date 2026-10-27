@@ -1,0 +1,62 @@
+name: Build fgetpriority LKM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+
+env:
+  KERNEL_REPO: https://github.com/fredslbn/superchime.git   # change to your target kernel
+  KERNEL_BRANCH: bbrv3                                   # change to match your device/GKI branch
+  ARCH: arm64
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fgetpriority
+        uses: actions/checkout@v4
+        with:
+          path: fgetpriority
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev \
+                                   python3 git curl rsync cpio
+
+      - name: Fetch a matching ARM64 Clang toolchain
+        run: |
+          mkdir -p clang
+          curl -sSL -o clang.tar.xz \
+            https://github.com/Impqxr/aosp_clang_ci/releases/download/13289611/clang-13289611-linux-x86.tar.xz"
+
+          tar -xzf clang.tar.xz -C clang
+          echo "$PWD/clang/bin" >> "$GITHUB_PATH"
+
+      - name: Checkout kernel source
+        run: |
+          git clone --depth=1 -b "$KERNEL_BRANCH" "$KERNEL_REPO" kernel_src
+
+      - name: Prepare kernel config/headers
+        working-directory: kernel_src
+        run: |
+          make ARCH=$ARCH CC=clang O=out vendor/bengal_perf-defconfig
+          # ensure the option this module needs is enabled
+          echo "CONFIG_KALLSYMS_ALL=y" >> out/.config
+          make ARCH=$ARCH CC=clang O=out olddefconfig
+          make ARCH=$ARCH CC=clang O=out modules_prepare
+
+      - name: Build fgetpriority.ko
+        run: |
+          make -C kernel_src O=$PWD/kernel_src/out \
+            M=$PWD/fgetpriority/kernel \
+            ARCH=$ARCH CC=clang \
+            CONFIG_FGETPRIORITY=m modules
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fgetpriority-ko
+          path: fgetpriority/kernel/*.ko
+          
